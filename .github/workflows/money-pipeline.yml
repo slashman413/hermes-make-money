@@ -2,44 +2,56 @@ name: Make Money Pipeline
 
 on:
   schedule:
-    - cron: "0 6 * * *"  # Daily 06:00 UTC = 14:00 Taipei - check results
+    - cron: "0 6 * * *"  # Daily 06:00 UTC = 14:00 Taipei - update income dashboard
   workflow_dispatch:
     inputs:
-      experiment:
-        description: "Experiment ID to check"
+      amount:
+        description: "Income amount to record"
         required: false
-      check_all:
-        description: "Check all experiments"
-        type: boolean
-        default: true
+      source:
+        description: "Income source"
+        required: false
+      notes:
+        description: "Notes"
+        required: false
 
 env:
   PYTHON_VERSION: "3.11"
 
 jobs:
-  check-results:
+  income-tracker:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Check experiment results and generate skills
+      - name: Record income (if triggered with data)
+        if: github.event_name == 'workflow_dispatch' && inputs.amount != ''
         run: |
-          python scripts/auto_skill.py status
+          NOTES="${{ inputs.notes }}"
+          python scripts/income.py add \
+            --amount ${{ inputs.amount }} \
+            --source "${{ inputs.source }}" \
+            --notes "${NOTES:-收入記錄}"
 
-      - name: Update README with latest stats
+      - name: Generate income dashboard
         run: |
-          echo "## 📊 最新收益狀態" >> $GITHUB_STEP_SUMMARY
-          python scripts/auto_skill.py status >> $GITHUB_STEP_SUMMARY
+          python scripts/income.py dashboard
+          python scripts/income.py report
+          python scripts/income.py verify
 
-      - name: Commit auto-generated skills
+      - name: Output to job summary
+        run: |
+          echo "## 💰 收入儀表板" >> $GITHUB_STEP_SUMMARY
+          cat INCOME.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Commit updated dashboard
         run: |
           git config user.name "hermes-agent"
           git config user.email "hermes@nousresearch.com"
-          git add skills/ results/
-          git diff --staged --quiet || git commit -m "auto: update experiment results and skills"
+          git add data/ INCOME.md skills/ results/
+          git diff --staged --quiet || git commit -m "auto: update income dashboard $(date +%Y-%m-%d)"
           git push
