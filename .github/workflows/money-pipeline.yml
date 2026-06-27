@@ -1,0 +1,45 @@
+name: Make Money Pipeline
+
+on:
+  schedule:
+    - cron: "0 6 * * *"  # Daily 06:00 UTC = 14:00 Taipei - check results
+  workflow_dispatch:
+    inputs:
+      experiment:
+        description: "Experiment ID to check"
+        required: false
+      check_all:
+        description: "Check all experiments"
+        type: boolean
+        default: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  check-results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check experiment results and generate skills
+        run: |
+          python scripts/auto_skill.py status
+
+      - name: Update README with latest stats
+        run: |
+          echo "## 📊 最新收益狀態" >> $GITHUB_STEP_SUMMARY
+          python scripts/auto_skill.py status >> $GITHUB_STEP_SUMMARY
+
+      - name: Commit auto-generated skills
+        run: |
+          git config user.name "hermes-agent"
+          git config user.email "hermes@nousresearch.com"
+          git add skills/ results/
+          git diff --staged --quiet || git commit -m "auto: update experiment results and skills"
+          git push
