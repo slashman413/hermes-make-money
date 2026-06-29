@@ -22,6 +22,10 @@
 | 日期 | 金額 | 來源 | 分類 | 備註 |
 |------|------|------|------|------|
 | 2026-06-28 | $0.00 | pixabay-shorts-bot 聯盟行銷 | 聯盟行銷 | Exp-001 上線，待 YouTube 頻道有觀看數後開始追蹤點擊（博客來書籍聯盟連結） |
+| 2026-06-29 | $0.00 | ShortsGen Pro (Ko-fi) | 產品銷售 | $29/$99/$499 已上線 → https://ko-fi.com/s/896aa3c229 |
+| 2026-06-29 | $0.00 | TWSE Premium (Ko-fi) | 產品銷售 | $49/$99/$299 已上線 → https://ko-fi.com/s/b99720d13d |
+| 2026-06-29 | $0.00 | Deal Finder Pro (Ko-fi) | 產品銷售 | $9 已上線 → https://ko-fi.com/s/5730f8f947 |
+| 2026-06-29 | $0.00 | SEO Content Engine (Ko-fi) | 產品銷售 | $19 已上線 → https://ko-fi.com/s/a03f0a8e3b |
 
 ---
 
