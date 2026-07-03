@@ -61,6 +61,7 @@ jobs:
           git config user.email "hermes@nousresearch.com"
           git add scripts/data/ INCOME.md
           git diff --staged --quiet || git commit -m "auto: update income dashboard $(date +%Y-%m-%d)"
+          git pull --rebase origin main
           git push
 
   notify-failure:
