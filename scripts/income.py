@@ -21,6 +21,7 @@ DATA_DIR = Path(__file__).parent / "data"
 INCOME_FILE = DATA_DIR / "income.json"
 CSV_FILE = DATA_DIR / "income.csv"
 DASHBOARD_FILE = Path(__file__).parent.parent / "INCOME.md"
+HTML_FILE = Path(__file__).parent.parent / "docs" / "index.html"
 
 def ensure_dirs():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -188,6 +189,162 @@ def generate_markdown(full: bool = False):
     print(f"✅ INCOME.md generated ({len(sorted_recs)} entries, ${total:.2f} total)")
     return content
 
+def generate_html():
+    """Generate docs/index.html — a self-contained income dashboard for GitHub Pages.
+
+    Data is baked in at build time (no client-side fetch), so the page works
+    on GitHub Pages with zero dependencies.
+    """
+    import html as _html
+
+    records = _load()
+    sorted_recs = sorted(records, key=lambda x: x["date"])
+    total = sum(r["amount"] for r in records)
+
+    # Monthly / category / source aggregates
+    monthly, by_category, by_source = {}, {}, {}
+    for r in sorted_recs:
+        ym = r["date"][:7]
+        monthly[ym] = monthly.get(ym, 0) + r["amount"]
+        cat = r.get("category", "其他")
+        by_category[cat] = by_category.get(cat, 0) + r["amount"]
+        by_source[r["source"]] = by_source.get(r["source"], 0) + r["amount"]
+
+    n_months = max(len(monthly), 1)
+    avg_month = total / n_months
+    best_month_amt = max(monthly.values()) if monthly else 0.0
+    best_month = max(monthly, key=monthly.get) if monthly else "—"
+    updated = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+
+    def esc(s):
+        return _html.escape(str(s))
+
+    def money(v):
+        return f"${v:,.2f}"
+
+    # Monthly bars
+    max_monthly = best_month_amt if best_month_amt > 0 else 1
+    month_bars = ""
+    for ym in sorted(monthly.keys()):
+        amt = monthly[ym]
+        pct = min(100, amt / max_monthly * 100)
+        month_bars += (
+            f'<div class="bar-row"><span class="bar-label">{esc(ym)}</span>'
+            f'<div class="bar-track"><div class="bar-fill" style="width:{pct:.1f}%"></div></div>'
+            f'<span class="bar-val">{money(amt)}</span></div>\n'
+        )
+    if not month_bars:
+        month_bars = '<p class="empty">尚無月份資料</p>'
+
+    # Category chips
+    cat_chips = ""
+    for cat, amt in sorted(by_category.items(), key=lambda x: -x[1]):
+        cat_chips += f'<span class="chip">{esc(cat)} · {money(amt)}</span>'
+    if not cat_chips:
+        cat_chips = '<span class="chip empty">尚無分類</span>'
+
+    # Entries table (newest first)
+    rows = ""
+    for r in sorted(records, key=lambda x: x["date"], reverse=True):
+        rows += (
+            "<tr>"
+            f"<td class='nowrap'>{esc(r['date'])}</td>"
+            f"<td class='amt'>{money(r['amount'])}</td>"
+            f"<td>{esc(r['source'])}</td>"
+            f"<td><span class='tag'>{esc(r.get('category','其他'))}</span></td>"
+            f"<td class='notes'>{esc(r.get('notes',''))}</td>"
+            "</tr>\n"
+        )
+    if not rows:
+        rows = "<tr><td colspan='5' class='empty'>📭 尚無收入記錄</td></tr>"
+
+    doc = f"""<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>💰 收入儀表板 · hermes-make-money</title>
+<meta name="description" content="hermes-make-money 每日自動更新的收入儀表板">
+<style>
+  :root {{ --bg:#0b0f17; --card:#151b26; --line:#232c3b; --txt:#e6ecf5; --dim:#8b98ad; --accent:#3ddc97; --accent2:#4d8dff; }}
+  * {{ box-sizing:border-box; }}
+  body {{ margin:0; font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans TC",sans-serif; background:var(--bg); color:var(--txt); line-height:1.5; }}
+  .wrap {{ max-width:960px; margin:0 auto; padding:32px 20px 64px; }}
+  header h1 {{ margin:0 0 4px; font-size:1.7rem; }}
+  header .sub {{ color:var(--dim); font-size:.9rem; }}
+  .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin:24px 0; }}
+  .stat {{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }}
+  .stat .k {{ color:var(--dim); font-size:.8rem; letter-spacing:.03em; text-transform:uppercase; }}
+  .stat .v {{ font-size:1.8rem; font-weight:700; margin-top:6px; }}
+  .stat .v.green {{ color:var(--accent); }}
+  section {{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; margin:18px 0; }}
+  section h2 {{ margin:0 0 16px; font-size:1.1rem; }}
+  .bar-row {{ display:flex; align-items:center; gap:12px; margin:8px 0; font-size:.9rem; }}
+  .bar-label {{ width:64px; color:var(--dim); flex:none; }}
+  .bar-track {{ flex:1; background:#0d1420; border-radius:6px; height:14px; overflow:hidden; }}
+  .bar-fill {{ height:100%; background:linear-gradient(90deg,var(--accent2),var(--accent)); border-radius:6px; min-width:2px; }}
+  .bar-val {{ width:90px; text-align:right; flex:none; }}
+  .chips {{ display:flex; flex-wrap:wrap; gap:8px; }}
+  .chip {{ background:#0d1420; border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:.85rem; }}
+  table {{ width:100%; border-collapse:collapse; font-size:.9rem; }}
+  th,td {{ text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top; }}
+  th {{ color:var(--dim); font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; }}
+  td.amt {{ color:var(--accent); font-weight:600; white-space:nowrap; }}
+  td.nowrap {{ white-space:nowrap; color:var(--dim); }}
+  .tag {{ background:#0d1420; border:1px solid var(--line); border-radius:6px; padding:2px 8px; font-size:.78rem; }}
+  .notes {{ color:var(--dim); max-width:320px; }}
+  .empty {{ color:var(--dim); text-align:center; padding:20px; }}
+  footer {{ color:var(--dim); font-size:.82rem; text-align:center; margin-top:28px; }}
+  a {{ color:var(--accent2); }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>💰 收入儀表板</h1>
+    <div class="sub">hermes-make-money · 目標：每日 $500 被動收入 · 最後更新 {esc(updated)}</div>
+  </header>
+
+  <div class="grid">
+    <div class="stat"><div class="k">總收入</div><div class="v green">{money(total)}</div></div>
+    <div class="stat"><div class="k">總筆數</div><div class="v">{len(records)}</div></div>
+    <div class="stat"><div class="k">月均收入</div><div class="v">{money(avg_month)}</div></div>
+    <div class="stat"><div class="k">最高月收入</div><div class="v">{money(best_month_amt)}<span style="font-size:.9rem;color:var(--dim)"> ({esc(best_month)})</span></div></div>
+  </div>
+
+  <section>
+    <h2>📅 月份收入</h2>
+    {month_bars}
+  </section>
+
+  <section>
+    <h2>📂 分類統計</h2>
+    <div class="chips">{cat_chips}</div>
+  </section>
+
+  <section>
+    <h2>📋 逐筆收入（最新在上）</h2>
+    <table>
+      <thead><tr><th>日期</th><th>金額</th><th>來源</th><th>分類</th><th>備註</th></tr></thead>
+      <tbody>
+{rows}      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    🔄 由 GitHub Actions 每日自動更新（UTC 06:00）·
+    <a href="https://github.com/slashman413/hermes-make-money">原始碼</a>
+  </footer>
+</div>
+</body>
+</html>
+"""
+
+    HTML_FILE.parent.mkdir(parents=True, exist_ok=True)
+    HTML_FILE.write_text(doc, encoding="utf-8")
+    print(f"✅ docs/index.html generated ({len(records)} entries, {money(total)} total)")
+    return doc
+
 def verify():
     """Verify data integrity"""
     records = _load()
@@ -228,6 +385,7 @@ if __name__ == "__main__":
         category = sys.argv[sys.argv.index("--category") + 1] if "--category" in sys.argv else "其他"
         add_entry(date_str, amount, source, notes, category)
         generate_markdown()
+        generate_html()
     
     elif cmd == "list":
         limit = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else 10
@@ -239,7 +397,11 @@ if __name__ == "__main__":
     
     elif cmd == "dashboard":
         generate_markdown(full=True)
-    
+        generate_html()
+
+    elif cmd == "html":
+        generate_html()
+
     elif cmd == "verify":
         verify()
     
